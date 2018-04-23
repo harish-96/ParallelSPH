@@ -2,9 +2,8 @@ Number of particles : 256
 Box size x : 1
 Box size y : 1
 Density : 1
-
 Viscosity : 1
 Velocity : 1
-
 Simulation time : 1
-Work group size : 32
+Threads per block : 32
+Time step : 0.0001
