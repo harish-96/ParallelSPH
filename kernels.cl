@@ -1,5 +1,7 @@
 #DEFINE gamma 1.4
 
+// test
+
 double kernel_cubic(float2 xi, float2 xj, double h)
 {
     double q = distance(xi, xj);
