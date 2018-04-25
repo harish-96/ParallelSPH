@@ -14,37 +14,35 @@ float kernel_cubic(float2 xi, float2 xj, float h)
     return W;
 }
 
-float kernel_derivative(float2 xi, float2 xj, float h)
+float2 kernel_derivative(float2 xi, float2 xj, float h)
 {
     float q = distance(xi, xj);
-    float dW = 0;
+    float dwdq = 0;
     if (q <= 1.)
-        dW = (9 / 4 * q * q - 3 * q) * 10 / (7 * M_PI * h * h);
+        dwdq = (9 / 4 * q * q - 3 * q) * 10 / (7 * M_PI * h * h);
     if (q > 1. && q < 2.)
-        dW = -7.5 * (2 - q) * (2-q) / (7 * M_PI * h * h);
+        dwdq = -7.5 * (2 - q) * (2-q) / (7 * M_PI * h * h);
 
-    float der = 0.;
-//    if (xi > xj)
-//        der = 1 / h;
-//    if (xi < xj)
-//        der = -1 / h;
-//    
-    return dW * der;
+    float2 dW = dwdq * (xi - xj) / q;
+
+    return dW;
 }
 
 float art_visc(float2 x_i, float2 x_j, float r_i, float r_j, float2 v_i, float2 v_j, float p_i, float p_j, float h)
 {
+    float alpha = 1;
+    float beta = 1;
     float2 x = (x_i - x_j);
     float neta = 0.1 * h;
     float pia = 0;
 
-//    if (x * (v_i - v_j) <= 0)
-//        float ca = (pow(abs(gamma * p_i / r_i), 0.5) +
-//              pow(abs(gamma * p_j / r_j), 0.5)) / 2;
-//        float ra = (r_i + r_j) / 2;
-//        float mu = h * (v_i - v_j) * x / (np.abs(x)**2 + neta**2);
-//        pia = (-alpha * ca * mu + beta * mu**2) / ra;
-//
+    if (dot(x, v_i - v_j) <= 0)
+    {
+        float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
+        float ra = (r_i + r_j) / 2;
+        float mu = h * dot(v_i - v_j, x) / (pow(length(x), 2) + neta*neta);
+        pia = (-alpha * ca * mu + beta * mu * mu) / ra;
+    }
     return pia;
 }
 
@@ -80,7 +78,7 @@ __kernel void SUMDEN(__global float2* x, __global float* r, float m, int N, floa
 __kernel void UPDATE_VEL(__global float2* x, __global float2* v, __global float* r, __global float *e, float m, int N, float dt, float h)
 {
 	const int i = get_global_id(0);
-    float dv = 0;
+    float2 dv = 0;
     float de = 0;
     float p_i = (gamma - 1) * r[i] * e[i];
 
@@ -89,7 +87,7 @@ __kernel void UPDATE_VEL(__global float2* x, __global float2* v, __global float*
         float p_j = (gamma - 1) * r[j] * e[j];
 
         float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p_i, p_j, h);
-        float dW = kernel_derivative(x[i], x[j], h);
+        float2 dW = kernel_derivative(x[i], x[j], h);
         
         float calc = (p_j / r[j] / r[j] + p_i / r[i] / r[i] + av);
         float calc1 = (p_i / r[i] / r[i] + av);
