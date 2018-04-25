@@ -94,7 +94,7 @@ __kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2*
 {
 	const int i = get_global_id(0);
     float2 dv = 0;
-    float de = 0;
+//    float de = 0;
 //    float p_i = (gamma - 1) * r[i] * e[i];
 	
     for (int j=0; j<N; j++)
@@ -105,15 +105,33 @@ __kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2*
         float2 dW = kernel_derivative(x[i], x[j], h);
         
         float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
-        float calc1 = (p[i] / r[i] / r[i] + av);
+//        float calc1 = (p[i] / r[i] / r[i] + av);
 
         dv += - m * calc * dW;
 //        de += m / 2 * calc1 * (v[i] - v[j]) * dW;
     }
 
     v[i] += dv * dt;
-    e[i] += de * dt;
+//    e[i] += de * dt;
 }
+
+__kernel void WALL(__global float2* v,__global float2* vw, float h, float rho0)
+{
+	const int i = get_global_id(0);
+    float2 num_v_w = 0;
+    float den_v_w = 0;
+	
+    for (int j=0; j<N ; j++)
+    {
+    	num_v_w[i] += v[j]*kernel_cubic(x[i], x[j], h);
+// check	    
+	den_v_w += kernel_cubic(x[i], x[j], h);
+    }
+
+    vw[i] = - num_v_w[i]/den_v_w[i] ;
+    
+}
+
 
 __kernel void MIRROR(__global float2* x, __global float2* geom, __global float2* u, int N, int geom_numpts)
 {
