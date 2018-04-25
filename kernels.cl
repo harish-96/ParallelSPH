@@ -1,4 +1,5 @@
 #define gamma 1.4
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
 // test
 
@@ -7,9 +8,9 @@ float kernel_cubic(float2 xi, float2 xj, float h)
     float q = distance(xi, xj);
     float W = 0;
     if (q <= 1.)
-        W += 2. / (3 * h) * (1. - 3 / 2 * q * q * (1 - q / 2));
+        W += 10 / (7 * M_PI * h * h) * (1. - 3 / 2 * q * q * (1 - q / 2));
     if (q > 1. && q < 2.)
-        W += 2. / (12 * h) * pow((2 - q),3);
+        W += 10 / (28 * M_PI * h * h) * pow((2 - q),3);
     return W;
 }
 
@@ -18,9 +19,9 @@ float kernel_derivative(float2 xi, float2 xj, float h)
     float q = distance(xi, xj);
     float dW = 0;
     if (q <= 1.)
-        dW = (3 * q * q - 4 * q) / (2 * h);
+        dW = (9 / 4 * q * q - 3 * q) * 10 / (7 * M_PI * h * h);
     if (q > 1. && q < 2.)
-        dW = - (2 - q) * (2-q) / (2 * h);
+        dW = -7.5 * (2 - q) * (2-q) / (7 * M_PI * h * h);
 
     float der = 0.;
 //    if (xi > xj)
