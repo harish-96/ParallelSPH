@@ -2,6 +2,11 @@
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
 // test
+float time_step(float cfl, float h0, float c0)
+{
+    float dt=cfl*h0/c0 ;  
+    return dt;
+}
 
 float kernel_cubic(float2 xi, float2 xj, float h)
 {
@@ -75,16 +80,28 @@ __kernel void SUMDEN(__global float2* x, __global float* r, float m, int N, floa
     
 }
 
-__kernel void UPDATE_VEL(__global float2* x, __global float2* v, __global float* r, __global float *e, float m, int N, float dt, float h)
+__kernel void INCOMP_P(__global float* r,__global float* p, float c0, float gamma, float rho0)
+{
+	const int i = get_global_id(0);
+	
+	B = rho0 * c0 * c0 / gamma
+        p[i] = B * ( pow(r[i]/rho0,gamma) - 1 ) ;
+    
+}
+
+
+__kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2* v, __global float* r, __global float *e, float m, int N, float dt, float h)
 {
 	const int i = get_global_id(0);
     float2 dv = 0;
     float de = 0;
-    float p_i = (gamma - 1) * r[i] * e[i];
-
+//    float p_i = (gamma - 1) * r[i] * e[i];
+    float p_i = p[i];
+	
     for (int j=0; j<N; j++)
     {
-        float p_j = (gamma - 1) * r[j] * e[j];
+//        float p_j = (gamma - 1) * r[j] * e[j];   
+        float p_j = p[j];
 
         float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p_i, p_j, h);
         float2 dW = kernel_derivative(x[i], x[j], h);
