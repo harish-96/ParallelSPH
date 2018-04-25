@@ -80,12 +80,12 @@ __kernel void SUMDEN(__global float2* x, __global float* r, float m, int N, floa
     
 }
 
-__kernel void INCOMP_P(__global float* r,__global float* p, float c0, float gamma, float rho0)
+__kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0)
 {
 	const int i = get_global_id(0);
-	
-	B = rho0 * c0 * c0 / gamma
-        p[i] = B * ( pow(r[i]/rho0,gamma) - 1 ) ;
+    float B = rho0 * c0 * c0 / gamma;
+    double tmp = pow((double)r[i] / rho0, (double)gamma) - 1;
+    p[i] = B * (tmp) ;
     
 }
 
@@ -96,18 +96,16 @@ __kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2*
     float2 dv = 0;
     float de = 0;
 //    float p_i = (gamma - 1) * r[i] * e[i];
-    float p_i = p[i];
 	
     for (int j=0; j<N; j++)
     {
 //        float p_j = (gamma - 1) * r[j] * e[j];   
-        float p_j = p[j];
 
-        float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p_i, p_j, h);
+        float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p[i], p[j], h);
         float2 dW = kernel_derivative(x[i], x[j], h);
         
-        float calc = (p_j / r[j] / r[j] + p_i / r[i] / r[i] + av);
-        float calc1 = (p_i / r[i] / r[i] + av);
+        float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
+        float calc1 = (p[i] / r[i] / r[i] + av);
 
         dv += - m * calc * dW;
 //        de += m / 2 * calc1 * (v[i] - v[j]) * dW;
