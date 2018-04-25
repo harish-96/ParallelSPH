@@ -46,16 +46,21 @@ double art_visc(float2 x_i, float2 x_j, double r_i, double r_j, float2 v_i, floa
 }
 
 
-__kernel void VEL(__global float2* x, __global float2* v, __global double* r, double m, __global float2* u, double h, int N)
+__kernel void UPDATE_POS(__global float2* x, __global float2* v, __global double* r, double m, double h, int N)
 {
 
 	const int i = get_global_id(0);
+    float2 tmp = 0;
 
     for(int j = 0; j < N; j++)
     {
         double W = kernel_cubic(x[i], x[j], h);
-        v[i] += e_con * (m * 2 / (r[j] + r[i])) * (u[j] - u[i]) * W;
+        tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
     }
+
+    barrier(CLK_LOCAL_MEM_FENCE);
+    v[i] = tmp;
+    x[i] += v[i] * dt;
 }
 
 __kernel void SUMDEN(__global float2* x, __global double* r, double m, int N)

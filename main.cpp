@@ -10,11 +10,20 @@ using namespace std;
 void readParams(string filename, int* numpts, double* box_size_x, double* box_size_y, double* density, double* viscosity, double* velocity, double* time, int* local_size, double *dt)
 {
 
-    std::ifstream f(filename);
+    int nf = 7; //Number of floating point parameters
+    int nd = 2; //Number of integer parameters
+    
+    int *d_vars[] = { numpts, local_size };
+    double *f_vars[] = { box_size_x,  box_size_y, density, viscosity, velocity, time, dt };
+
+    string d_params[] = {"number of particles : ", "threads per block : "};
+    string f_params[] = {"box size x : ", "box size y : ", "density : ",
+                         "viscosity : ", "velocity : ", "simulation time : ",
+                         "time step : " };
+
+    ifstream f(filename);
     string line;
-    string params[] = {"number of particles : ", "box size x : ", "box size y : ",
-                       "density : ", "viscosity : ", "velocity : ", "simulation time : ",
-                       "threads per block : ", "time step : " };
+
     if(f.is_open())
     {
         while(getline (f,line) )
@@ -23,15 +32,14 @@ void readParams(string filename, int* numpts, double* box_size_x, double* box_si
              char* pEnd;
              transform(line.begin(), line.end(), line.begin(), ::tolower);
 
-             if (line.find(params[0]) != string::npos) *numpts = (int)strtof(line.substr(params[0].size()).c_str(), &pEnd);
-             if (line.find(params[1]) != string::npos) *box_size_x = strtof(line.substr(params[1].size()).c_str(), &pEnd);
-             if (line.find(params[2]) != string::npos) *box_size_y = strtof(line.substr(params[2].size()).c_str(), &pEnd);
-             if (line.find(params[3]) != string::npos) *density = strtof(line.substr(params[3].size()).c_str(), &pEnd);
-             if (line.find(params[4]) != string::npos) *viscosity = strtof(line.substr(params[4].size()).c_str(), &pEnd);
-             if (line.find(params[5]) != string::npos) *velocity = strtof(line.substr(params[5].size()).c_str(), &pEnd);
-             if (line.find(params[6]) != string::npos) *time = strtof(line.substr(params[6].size()).c_str(), &pEnd);
-             if (line.find(params[7]) != string::npos) *local_size = (int)strtof(line.substr(params[7].size()).c_str(), &pEnd);
-             if (line.find(params[8]) != string::npos) *dt = strtof(line.substr(params[8].size()).c_str(), &pEnd);
+             for (int i=0; i < nd; i++){
+                 if (line.find(d_params[i]) != string::npos)
+                     *(d_vars[i]) = (int)strtof(line.substr(d_params[i].size()).c_str(), &pEnd);
+             }
+             for (int i=0; i < nf; i++){
+                 if (line.find(f_params[i]) != string::npos)
+                     *(f_vars[i]) = strtof(line.substr(f_params[i].size()).c_str(), &pEnd);
+             }
 
         }
         f.close();
@@ -73,18 +81,21 @@ int main(int argc, char *argv[])
 	const size_t global_work_size[] = { gwsize };
     const size_t local_work_size[] = { local_size };
 
-    vector<cl_float2> x(numpts), u(numpts), r(numpts);
-    set_ic(x, u, r);
+    vector<cl_float2> x(numpts), v(numpts), r(numpts);
+    set_ic(x, v, r);
 
     cl_context context;
     cl_device_id did;
     initialize_opencl(&context, &did);
 
-    cl_mem buf_x, buf_r, buf_u, buf_v;
+    cl_mem buf_x, buf_r, buf_v;
 
 	buf_x = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float2)*numpts, x.data(),
                           &error);
 	CheckError(error);
+    
+    /* ALLOCATE OTHER BUFFERS, CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
+
 }
