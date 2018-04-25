@@ -96,6 +96,24 @@ int main(int argc, char *argv[])
                           &error);
 	CheckError(error);
     
-    /* ALLOCATE OTHER BUFFERS, CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
+	buf_r = clCreateBuffer(context,
+                          CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                          sizeof(cl_float2)*numpts, r.data(),
+                          &error);
+	CheckError(error);
+    
+	buf_v = clCreateBuffer(context,
+                          CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                          sizeof(cl_float2)*numpts, v.data(),
+                          &error);
+	CheckError(error);
+    
+    /* CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
+    cl_program program = CreateProgram(file_to_string("kernels.cl"), context);
+    cl_device_id build_list[] = { did };
+    clBuildProgram(program, 1, build_list,
+                   nullptr, nullptr, nullptr);
+    cl_kernel kernel = clCreateKernel(program, "SUMDEN", &error);
+    CheckError(error);
 
 }
