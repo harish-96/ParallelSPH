@@ -43,7 +43,8 @@ float art_visc(float2 x_i, float2 x_j, float r_i, float r_j, float2 v_i, float2 
 
     if (dot(x, v_i - v_j) <= 0)
     {
-        float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
+// check
+	float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
         float ra = (r_i + r_j) / 2;
         float mu = h * dot(v_i - v_j, x) / (pow(length(x), 2) + neta*neta);
         pia = (-alpha * ca * mu + beta * mu * mu) / ra;
@@ -115,20 +116,29 @@ __kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2*
 //    e[i] += de * dt;
 }
 
-__kernel void WALL(__global float2* v,__global float2* vw, float h, float rho0)
+__kernel void WALL(__global float2* v,__global float2* x,__global float* p,__global float2* vw,__global float* pw,__global float* rw, float h, float rho0, float c0)
 {
 	const int i = get_global_id(0);
     float2 num_v_w = 0;
-    float den_v_w = 0;
+    float num_p_w =0;
+    float den_w = 0;
 	
     for (int j=0; j<N ; j++)
     {
-    	num_v_w[i] += v[j]*kernel_cubic(x[i], x[j], h);
+    	num_v_w += v[j]*kernel_cubic(x[i], x[j], h);
+	num_p_w += p[j]*kernel_cubic(x[i], x[j], h);
 // check	    
-	den_v_w += kernel_cubic(x[i], x[j], h);
+	den_w += kernel_cubic(x[i], x[j], h);
     }
 
-    vw[i] = - num_v_w[i]/den_v_w[i] ;
+    vw[i] = - num_v_w/den_w ;
+    pw[i] = num_p_w/den_w;
+	
+    float B = rho0 * c0 * c0 / gamma;
+    double tmp =   pw[i]/B + 1; 
+    double tmp1 = 1/gamma;
+    double tmp2 = pow((double) tmp, (double) tmp1);
+    rw[i] = rho * (tmp2) ;
     
 }
 
