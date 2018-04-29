@@ -7,14 +7,14 @@
 
 using namespace std;
 
-void readParams(string filename, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* time, int* local_size, float *dt, float *h)
+void readParams(string filename, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* total_t, int* local_size, float *dt, float *h)
 {
 
     int nf = 8; //Number of floating point parameters
     int nd = 3; //Number of integer parameters
     
     int *d_vars[] = { numpts, Nw, local_size };
-    float *f_vars[] = { box_size_x,  box_size_y, density, viscosity, velocity, time, dt, h };
+    float *f_vars[] = { box_size_x,  box_size_y, density, viscosity, velocity, total_t, dt, h };
 
     string d_params[] = {"number of fluid particles : ", "number of wall particles : ","threads per block : "};
     string f_params[] = {"box size x : ", "box size y : ", "density : ",
@@ -51,7 +51,8 @@ void readParams(string filename, int* numpts, int*Nw, float* box_size_x, float* 
     }
 }
 
-void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v, vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw, float dx)
+void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
+            vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw, float dx)
 {
     for (int i=0; i < x.size(); i++)
     {
@@ -84,10 +85,10 @@ int main(int argc, char *argv[])
     }
     cl_int error;
     int numpts, Nw, local_size;
-    float box_size_x, box_size_y, rho0, viscosity, velocity, time, dt, h;
+    float box_size_x, box_size_y, rho0, viscosity, velocity, total_t, dt, h;
 
     readParams(input_params, &numpts, &Nw, &box_size_x, &box_size_y,
-               &rho0, &viscosity, &velocity, &time,
+               &rho0, &viscosity, &velocity, &total_t,
                &local_size, &dt, &h);
 
 
@@ -223,35 +224,41 @@ int main(int argc, char *argv[])
 	clSetKernelArg(kernel_vel, 12, sizeof(float), &h);
 
 	clSetKernelArg(kernel_wall, 0, sizeof(cl_mem), &buf_x);
-	clSetKernelArg(kernel_wall, 1, sizeof(cl_mem), &buf_v);
-	clSetKernelArg(kernel_wall, 2, sizeof(cl_mem), &buf_vw);
-	clSetKernelArg(kernel_wall, 3, sizeof(cl_mem), &buf_p);
-	clSetKernelArg(kernel_wall, 4, sizeof(cl_mem), &buf_pw);
-	clSetKernelArg(kernel_wall, 5, sizeof(cl_mem), &buf_rw);
-	clSetKernelArg(kernel_wall, 6, sizeof(float), &h);
-	clSetKernelArg(kernel_wall, 7, sizeof(float), &rho0);
-	clSetKernelArg(kernel_wall, 8, sizeof(float), &c0);
-	clSetKernelArg(kernel_wall, 9, sizeof(int), &numpts);
+	clSetKernelArg(kernel_wall, 1, sizeof(cl_mem), &buf_xw);
+	clSetKernelArg(kernel_wall, 2, sizeof(cl_mem), &buf_v);
+	clSetKernelArg(kernel_wall, 3, sizeof(cl_mem), &buf_vw);
+	clSetKernelArg(kernel_wall, 4, sizeof(cl_mem), &buf_p);
+	clSetKernelArg(kernel_wall, 5, sizeof(cl_mem), &buf_pw);
+	clSetKernelArg(kernel_wall, 6, sizeof(cl_mem), &buf_rw);
+	clSetKernelArg(kernel_wall, 7, sizeof(float), &h);
+	clSetKernelArg(kernel_wall, 8, sizeof(float), &rho0);
+	clSetKernelArg(kernel_wall, 9, sizeof(float), &c0);
+	clSetKernelArg(kernel_wall, 10, sizeof(int), &numpts);
 
 	cl_command_queue Q = clCreateCommandQueue(context, did,
 	                                          CL_QUEUE_PROFILING_ENABLE, &error);
     CheckError(error);
     cl_event event;
-    CheckError(clEnqueueNDRangeKernel(Q, kernel_den, 1,
-                                      NULL, global_work_size, local_work_size,
-                                      0, NULL, &event));
-    CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
-                                      NULL, global_work_size, local_work_size,
-                                      0, NULL, &event));
-    /* CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1, */
-    /*                                   NULL, global_work_size, local_work_size, */
-    /*                                   0, NULL, &event)); */
-    /* CheckError(clEnqueueNDRangeKernel(Q, kernel_vel, 1, */
-    /*                                   NULL, global_work_size, local_work_size, */
-    /*                                   0, NULL, &event)); */
-    /* CheckError(clEnqueueNDRangeKernel(Q, kernel_pos, 1, */
-    /*                                   NULL, global_work_size, local_work_size, */
-    /*                                   0, NULL, &event)); */
+
+    int nTime = total_t / dt;
+    for (int i=0; i < nTime; i++)
+    {
+        /* CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1, */
+        /*                                   NULL, global_work_size_w, local_work_size, */
+        /*                                   0, NULL, &event)); */
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_den, 1,
+                                          NULL, global_work_size, local_work_size,
+                                          0, NULL, &event));
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
+                                          NULL, global_work_size, local_work_size,
+                                          0, NULL, &event));
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_vel, 1,
+                                          NULL, global_work_size, local_work_size,
+                                          0, NULL, &event));
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_pos, 1,
+                                          NULL, global_work_size, local_work_size,
+                                          0, NULL, &event));
+    }
 
     CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
                                        sizeof(cl_float)*numpts, p.data(),
@@ -266,5 +273,11 @@ int main(int argc, char *argv[])
                                        sizeof(cl_float2)*numpts, x.data(),
                                        0, nullptr, nullptr));
     for (int i=0; i < x.size(); i++)
-        cout << "Particle number" << i << "\t" << r[i] << "\t" << p[i] << endl;
+    {
+        cout << "\n\nParticle number" << i << endl;
+        cout << "Density :" << r[i] << endl;
+        cout << "Pressure : " << p[i] << endl;
+        cout << "x : " << x[i].s[0] << "\t y : " << x[i].s[1] << endl;
+        cout << "Velx : " << v[i].s[0] << "\t Vely : " << v[i].s[1] << endl;
+    }
 }

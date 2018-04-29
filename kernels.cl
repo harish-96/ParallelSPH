@@ -23,11 +23,11 @@ float2 kernel_derivative(float2 xi, float2 xj, float h)
     float q = distance(xi, xj) / h;
     float dwdq = 0;
     if (q <= 1.)
-        dwdq = (9 / 4 * q * q - 3 * q) * 10 / (7 * M_PI * h * h);
+        dwdq = (9 / 4 * q - 3) * 10 / (7 * M_PI * h * h);
     if (q > 1. && q < 2.)
-        dwdq = -7.5 * (2 - q) * (2-q) / (7 * M_PI * h * h);
+        dwdq = -7.5 * (2 - q) * (2-q) / (7 * M_PI * q * h * h);
 
-    float2 dW = dwdq * (xi - xj) / q;
+    float2 dW = dwdq * (xi - xj) / h / h;
 
     return dW;
 }
@@ -37,13 +37,12 @@ float art_visc(float2 x_i, float2 x_j, float r_i, float r_j, float2 v_i, float2 
     float alpha = 1;
     float beta = 1;
     float2 x = (x_i - x_j);
-    float neta = 0.1 * h;
+    float neta = 0.01 * h;
     float pia = 0;
 
     if (dot(x, v_i - v_j) <= 0)
     {
-// check
-	float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
+        float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
         float ra = (r_i + r_j) / 2;
         float mu = h * dot(v_i - v_j, x) / (pow(length(x), 2) + neta*neta);
         pia = (-alpha * ca * mu + beta * mu * mu) / ra;
@@ -57,17 +56,15 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 
 	const int i = get_global_id(0);
     float2 tmp = 0;
-    float e_con = 0.5; //CHANGE THIS
+    float e_con = 0.; //CHANGE THIS
 
     for(int j = 0; j < N; j++)
     {
         float W = kernel_cubic(x[i], x[j], h);
-        tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
+        tmp -= e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
-    v[i] = tmp;
-    x[i] = v[i] * dt;
+    x[i] += (tmp + v[i]) * dt;
 }
 
 // N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
@@ -143,7 +140,7 @@ __kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float
 }
 
 // Launch one kernel per wall particle
-__kernel void WALL(__global float2* x, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N)
+__kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N)
 {
 	const int i = get_global_id(0);
     float2 num_v_w = 0;
@@ -152,9 +149,9 @@ __kernel void WALL(__global float2* x, __global float2* v, __global float2* vw, 
 	
     for (int j=0; j<N ; j++)
     {
-    	num_v_w += v[j]*kernel_cubic(x[i], x[j], h);
-        num_p_w += p[j]*kernel_cubic(x[i], x[j], h);
-        den_w += kernel_cubic(x[i], x[j], h);
+    	num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
+        num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
+        den_w += kernel_cubic(xw[i], x[j], h);
     }
 
     vw[i] = - num_v_w/den_w;
