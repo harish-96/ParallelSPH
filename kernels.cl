@@ -1,7 +1,6 @@
 #define gamma 1.4
 #pragma OPENCL EXTENSION cl_khr_fp64 : enable
 
-// test
 float time_step(float cfl, float h0, float c0)
 {
     float dt=cfl*h0/c0 ;  
@@ -10,7 +9,7 @@ float time_step(float cfl, float h0, float c0)
 
 float kernel_cubic(float2 xi, float2 xj, float h)
 {
-    float q = distance(xi, xj);
+    float q = distance(xi, xj) / h;
     float W = 0;
     if (q <= 1.)
         W += 10 / (7 * M_PI * h * h) * (1. - 3 / 2 * q * q * (1 - q / 2));
@@ -21,7 +20,7 @@ float kernel_cubic(float2 xi, float2 xj, float h)
 
 float2 kernel_derivative(float2 xi, float2 xj, float h)
 {
-    float q = distance(xi, xj);
+    float q = distance(xi, xj) / h;
     float dwdq = 0;
     if (q <= 1.)
         dwdq = (9 / 4 * q * q - 3 * q) * 10 / (7 * M_PI * h * h);
@@ -71,16 +70,20 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
     x[i] = v[i] * dt;
 }
 
-__kernel void SUMDEN(__global float2* x, __global float* r, float m, int N, float h)
+// N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
+__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, int N, int Nw, float h)
 {
 	const int i = get_global_id(0);
     r[i] = 0;
 
     for (int j=0; j<N; j++)
         r[i] += m * kernel_cubic(x[i], x[j], h);
+    for (int j=0; j<Nw; j++)
+        r[i] += m * kernel_cubic(x[i], xw[j], h);
     
 }
 
+// Launch one kernel per FLUID particle
 __kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0)
 {
 	const int i = get_global_id(0);
@@ -91,32 +94,42 @@ __kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0
 }
 
 
-__kernel void UPDATE_VEL(__global float2* x, __global float* p, __global float2* v, __global float* r, __global float *e, float m, int N, float dt, float h)
+// Launch one kernel per FLUID particle
+__kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw,__global float* r, __global float* rw,__global float *e, float m, int N, int Nw, float dt, float h)
 {
 	const int i = get_global_id(0);
     float2 dv = 0;
-//    float de = 0;
-//    float p_i = (gamma - 1) * r[i] * e[i];
 	
     for (int j=0; j<N; j++)
     {
-//        float p_j = (gamma - 1) * r[j] * e[j];   
-
-        float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p[i], p[j], h);
-        float2 dW = kernel_derivative(x[i], x[j], h);
+        if (distance(x[i], x[j]) < 2*h)
+        {
+            float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p[i], p[j], h);
+            float2 dW = kernel_derivative(x[i], x[j], h);
         
-        float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
-//        float calc1 = (p[i] / r[i] / r[i] + av);
+            float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
 
-        dv += - m * calc * dW;
-//        de += m / 2 * calc1 * (v[i] - v[j]) * dW;
+            dv += - m * calc * dW;
+        }
     }
 
+    for (int j=0; j<Nw; j++)
+    {
+        if (distance(x[i], xw[j]) < 2*h)
+        {
+            float av = art_visc(x[i], xw[j], r[i], rw[j], v[i], vw[j], p[i], pw[j], h);
+            float2 dW = kernel_derivative(x[i], xw[j], h);
+        
+            float calc = (pw[j] / rw[j] / rw[j] + p[i] / r[i] / r[i] + av);
+
+            dv += - m * calc * dW;
+        }
+    }
     v[i] += dv * dt;
-//    e[i] += de * dt;
 }
 
-__kernel void WALL(__global float2* v,__global float2* x,__global float* p,__global float2* vw,__global float* pw,__global float* rw, float h, float rho0, float c0)
+// Launch one kernel per wall particle
+__kernel void WALL(__global float2* v,__global float2* x,__global float* p,__global float2* vw,__global float* pw,__global float* rw, float h, float rho0, float c0, int N)
 {
 	const int i = get_global_id(0);
     float2 num_v_w = 0;
@@ -126,20 +139,18 @@ __kernel void WALL(__global float2* v,__global float2* x,__global float* p,__glo
     for (int j=0; j<N ; j++)
     {
     	num_v_w += v[j]*kernel_cubic(x[i], x[j], h);
-	num_p_w += p[j]*kernel_cubic(x[i], x[j], h);
-// check	    
-	den_w += kernel_cubic(x[i], x[j], h);
+        num_p_w += p[j]*kernel_cubic(x[i], x[j], h);
+        den_w += kernel_cubic(x[i], x[j], h);
     }
 
-    vw[i] = - num_v_w/den_w ;
+    vw[i] = - num_v_w/den_w;
     pw[i] = num_p_w/den_w;
 	
     float B = rho0 * c0 * c0 / gamma;
     double tmp =   pw[i]/B + 1; 
     double tmp1 = 1/gamma;
     double tmp2 = pow((double) tmp, (double) tmp1);
-    rw[i] = rho * (tmp2) ;
-    
+    rw[i] = rho0 * (tmp2) ;
 }
 
 
