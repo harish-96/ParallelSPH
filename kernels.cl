@@ -11,7 +11,7 @@ float kernel_cubic(float2 xi, float2 xj, float h)
 {
     float q = distance(xi, xj) / h;
     float W = 0;
-    if (q <= 1.)
+    if (q <= 1.&& q >= 0)
         W += 10 / (7 * M_PI * h * h) * (1. - 3 / 2 * q * q * (1 - q / 2));
     if (q > 1. && q < 2.)
         W += 10 / (28 * M_PI * h * h) * pow((2 - q),3);
@@ -57,7 +57,7 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 
 	const int i = get_global_id(0);
     float2 tmp = 0;
-    float e_con = 1; //CHANGE THIS
+    float e_con = 0.5; //CHANGE THIS
 
     for(int j = 0; j < N; j++)
     {
@@ -71,17 +71,30 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 }
 
 // N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
-__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
-//__kernel void SUMDEN(__global float2* x, __global float* r, float m, float h, int N)
+//__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
+//{
+//	const int i = get_global_id(0);
+//    r[i] = 0;
+//
+//    for (int j=0; j<N; j++)
+//        r[i] += m * kernel_cubic(x[i], x[j], h);
+//    //for (int j=0; j<Nw; j++)
+//    //    r[i] += m * kernel_cubic(x[i], xw[j], h);
+//}
+
+__kernel void DEN(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* r, __global float* rw, float m, float h, float dt, int N, int Nw)
 {
 	const int i = get_global_id(0);
-    r[i] = 0;
-
+    float dr = 0;
     for (int j=0; j<N; j++)
-        r[i] += m * kernel_cubic(x[i], x[j], h);
+    {
+        dr += 1 / r[j] * dot(v[i] - v[j], kernel_derivative(x[i], x[j], h));
+    }
     for (int j=0; j<Nw; j++)
-        r[i] += m * kernel_cubic(x[i], xw[j], h);
-    
+    {
+        dr += 1 / rw[j] * dot(v[i] - vw[j], kernel_derivative(x[i], xw[j], h));
+    }
+    r[i] += dr * m * r[i] * dt;
 }
 
 // Launch one kernel per FLUID particle
@@ -154,11 +167,6 @@ __kernel void WALL(__global float2* x, __global float2* v, __global float2* vw, 
     rw[i] = rho0 * (tmp2) ;
 }
 
-
-__kernel void MIRROR(__global float2* x, __global float2* geom, __global float2* u, int N, int geom_numpts)
-{
-
-}
 __kernel void REDUCE(__global float *blk_sum, __global float *ret, 
                      __local float *y, int numItems)
 {
