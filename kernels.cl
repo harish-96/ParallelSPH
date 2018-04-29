@@ -71,7 +71,8 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 }
 
 // N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
-__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, int N, int Nw, float h)
+__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
+//__kernel void SUMDEN(__global float2* x, __global float* r, float m, float h, int N)
 {
 	const int i = get_global_id(0);
     r[i] = 0;
@@ -95,7 +96,7 @@ __kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0
 
 
 // Launch one kernel per FLUID particle
-__kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw,__global float* r, __global float* rw,__global float *e, float m, int N, int Nw, float dt, float h)
+__kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw,__global float* r, __global float* rw, float m, int N, int Nw, float dt, float h)
 {
 	const int i = get_global_id(0);
     float2 dv = 0;
@@ -129,7 +130,7 @@ __kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float
 }
 
 // Launch one kernel per wall particle
-__kernel void WALL(__global float2* v,__global float2* x,__global float* p,__global float2* vw,__global float* pw,__global float* rw, float h, float rho0, float c0, int N)
+__kernel void WALL(__global float2* x, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N)
 {
 	const int i = get_global_id(0);
     float2 num_v_w = 0;
