@@ -5,7 +5,9 @@ Box size y : 1
 Density : 1000
 Viscosity : 0.1
 Velocity : 1
-Simulation time : 10
+Simulation time : 1
 Threads per block : 256
 Time step : 0.0005
 Kernel size : 0.01
+Checkpoint save frequency : 100
+Output Directory : ./output

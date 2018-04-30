@@ -7,16 +7,17 @@
 
 using namespace std;
 
-void readParams(string filename, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* total_t, int* local_size, float *dt, float *h)
+void readParams(string filename, string &output_dir, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)
 {
 
     int nf = 8; //Number of floating point parameters
-    int nd = 3; //Number of integer parameters
+    int nd = 4; //Number of integer parameters
     
-    int *d_vars[] = { numpts, Nw, local_size };
+    int *d_vars[] = { numpts, Nw, local_size, saveFreq };
     float *f_vars[] = { box_size_x,  box_size_y, density, viscosity, velocity, total_t, dt, h };
 
-    string d_params[] = {"number of fluid particles : ", "number of wall particles : ","threads per block : "};
+    string d_params[] = {"number of fluid particles : ", "number of wall particles : ",
+                         "threads per block : ", "checkpoint save frequency : "};
     string f_params[] = {"box size x : ", "box size y : ", "density : ",
                          "viscosity : ", "velocity : ", "simulation time : ",
                          "time step : ", "kernel size : "};
@@ -40,8 +41,10 @@ void readParams(string filename, int* numpts, int*Nw, float* box_size_x, float* 
                  if (line.find(f_params[i]) != string::npos)
                      *(f_vars[i]) = strtof(line.substr(f_params[i].size()).c_str(), &pEnd);
              }
-
+             if (line.find("output directory") != string::npos)
+                 output_dir = line.substr(19);
         }
+
         f.close();
     }
     else
@@ -62,8 +65,6 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
         v[i].s[1] = 0;
         r[i] = 1000;
     }
-    for (int i=0; i < x.size(); i++)
-        cout << "Particle number" << i << "\t" << x[i].s[0] << "\t" << x[i].s[1] << endl;
     for (int i=0; i < xw.size(); i++)
     {
         xw[i].s[0] = 1000;
@@ -73,10 +74,38 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
         rw[i] = 100000;
     }
 }
+void saveCheckpoint(int i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
+{
+    int numpts = x.size();
+    char* command = (char*)("mkdir -p " + output_dir).c_str();
+    system(command);
+    string filename = output_dir + "/" + to_string(i) + ".csv";
+    ofstream f(filename); 
+    f << "Particle Number,X pos,Y pos,X vel,Y vel,Density,Pressure\n";
+    CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
+                                       sizeof(cl_float)*numpts, p.data(),
+                                       0, nullptr, nullptr));
+    CheckError(clEnqueueReadBuffer(Q, buf_r, true, 0,
+                                       sizeof(cl_float)*numpts, r.data(),
+                                       0, nullptr, nullptr));
+    CheckError(clEnqueueReadBuffer(Q, buf_v, true, 0,
+                                       sizeof(cl_float2)*numpts, v.data(),
+                                       0, nullptr, nullptr));
+    CheckError(clEnqueueReadBuffer(Q, buf_x, true, 0,
+                                       sizeof(cl_float2)*numpts, x.data(),
+                                       0, nullptr, nullptr));
+    
+    for (int i=0; i < x.size(); i++)
+    {
+        f << i << "," << x[i].s[0] << "," << x[i].s[1] << "," << v[i].s[0];
+        f << "," << v[i].s[1] << "," << r[i] << "," << p[i] << endl;
+    }
+    f.close();
+}
 
 int main(int argc, char *argv[])
 {
-    string input_params;
+    string input_params, output_dir;
     if(argc > 1) input_params = argv[1];
     else
     {
@@ -84,12 +113,12 @@ int main(int argc, char *argv[])
         exit(1);
     }
     cl_int error;
-    int numpts, Nw, local_size;
+    int numpts, Nw, local_size, saveFreq;
     float box_size_x, box_size_y, rho0, viscosity, velocity, total_t, dt, h;
 
-    readParams(input_params, &numpts, &Nw, &box_size_x, &box_size_y,
+    readParams(input_params, output_dir, &numpts, &Nw, &box_size_x, &box_size_y,
                &rho0, &viscosity, &velocity, &total_t,
-               &local_size, &dt, &h);
+               &local_size, &dt, &h, &saveFreq);
 
 
     float c0 = 10;
@@ -241,11 +270,14 @@ int main(int argc, char *argv[])
     cl_event event;
 
     int nTime = total_t / dt;
+    CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
+                                      NULL, global_work_size, local_work_size,
+                                      0, NULL, &event));
     for (int i=0; i < nTime; i++)
     {
-        /* CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1, */
-        /*                                   NULL, global_work_size_w, local_work_size, */
-        /*                                   0, NULL, &event)); */
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1,
+                                          NULL, global_work_size_w, local_work_size,
+                                          0, NULL, &event));
         CheckError(clEnqueueNDRangeKernel(Q, kernel_den, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
@@ -258,6 +290,10 @@ int main(int argc, char *argv[])
         CheckError(clEnqueueNDRangeKernel(Q, kernel_pos, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
+        if (i % saveFreq == 0)
+        {
+            saveCheckpoint(i, output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
+        }
     }
 
     CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
@@ -272,12 +308,12 @@ int main(int argc, char *argv[])
     CheckError(clEnqueueReadBuffer(Q, buf_x, true, 0,
                                        sizeof(cl_float2)*numpts, x.data(),
                                        0, nullptr, nullptr));
-    for (int i=0; i < x.size(); i++)
-    {
-        cout << "\n\nParticle number" << i << endl;
-        cout << "Density :" << r[i] << endl;
-        cout << "Pressure : " << p[i] << endl;
-        cout << "x : " << x[i].s[0] << "\t y : " << x[i].s[1] << endl;
-        cout << "Velx : " << v[i].s[0] << "\t Vely : " << v[i].s[1] << endl;
-    }
+    /* for (int i=0; i < x.size(); i++) */
+    /* { */
+    /*     cout << "\n\nParticle number" << i << endl; */
+    /*     cout << "Density :" << r[i] << endl; */
+    /*     cout << "Pressure : " << p[i] << endl; */
+    /*     cout << "x : " << x[i].s[0] << "\t y : " << x[i].s[1] << endl; */
+    /*     cout << "Velx : " << v[i].s[0] << "\t Vely : " << v[i].s[1] << endl; */
+    /* } */
 }

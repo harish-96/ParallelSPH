@@ -151,16 +151,16 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
     {
     	num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
         num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
-        den_w += kernel_cubic(xw[i], x[j], h);
+        den_w += kernel_cubic(xw[i], x[j], h) + 1e-10;
     }
 
     vw[i] = - num_v_w/den_w;
     pw[i] = num_p_w/den_w;
 	
     float B = rho0 * c0 * c0 / gamma;
-    double tmp =   pw[i]/B + 1; 
+    double tmp = pw[i]/B + 1; 
     double tmp1 = 1/gamma;
-    double tmp2 = pow((double) tmp, (double) tmp1);
+    double tmp2 =  pow((double) tmp, (double) tmp1);
     rw[i] = rho0 * (tmp2) ;
 }
 

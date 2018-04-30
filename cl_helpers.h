@@ -15,6 +15,17 @@ std::vector<cl_platform_id> GetPlatformIDs()
     return platform_ids;
 }
 
+std::vector<cl_device_id> GetGPUs(cl_platform_id pid)
+{
+  	cl_uint device_count;
+	clGetDeviceIDs(pid, CL_DEVICE_TYPE_GPU, 0, NULL, &device_count);
+
+    std::vector<cl_device_id> device_ids(device_count);
+	clGetDeviceIDs(pid, CL_DEVICE_TYPE_GPU, device_count,
+	               device_ids.data(), NULL);
+    return device_ids;
+}
+
 std::vector<cl_device_id> GetDeviceIDs(cl_platform_id pid)
 {
   	cl_uint device_count;
@@ -66,6 +77,7 @@ std::string file_to_string(std::string filename)
     std::ifstream f(filename);
     std::stringstream ss;
 	ss << f.rdbuf();
+    f.close();
 	return ss.str();
 }
 
@@ -74,17 +86,29 @@ void initialize_opencl(cl_context* context, cl_device_id* did)
     cl_int error;
 
     std::vector<cl_platform_id> platform_ids = GetPlatformIDs();
-    std::cout << "Number of platforms: " << (int)platform_ids.size()<< std::endl;
+    /* std::cout << "Number of platforms: " << (int)platform_ids.size()<< std::endl; */
 
     cl_platform_id pid = platform_ids[0];
 
-    std::vector<cl_device_id> device_ids =  GetDeviceIDs(pid);
-    std::cout << "Number of devices: " << (int)device_ids.size()<< std::endl;
-    for(int i = 0; i < (int)device_ids.size(); i++)
+    std::vector<cl_device_id> gpu_ids =  GetGPUs(pid);
+    if (gpu_ids.size() > 0)
     {
-        std::cout << GetDeviceName(device_ids[i]) << std::endl;
+        std::cout << "Available GPU devices :\n";
+        for(int i = 0; i < (int)gpu_ids.size(); i++)
+        {
+            std::cout << "GPU_" + std::to_string(i) + " : " << GetDeviceName(gpu_ids[i]) << std::endl;
+        }
+        int n;
+        std::cout << "Enter 'n' to pick GPU_n : ";
+        std::cin >> n;
+        *did = gpu_ids[n];
     }
-    *did = device_ids[2];
+    /* std::cout << "Number of devices: " << (int)device_ids.size()<< std::endl; */
+    else 
+    {
+        std::cout << "Error : No GPU found. Exiting\n"; 
+        std::exit(1);
+    }
 
     const cl_context_properties contextProperties [] =
     {
@@ -94,8 +118,8 @@ void initialize_opencl(cl_context* context, cl_device_id* did)
     };
 
     *context = clCreateContext (
-        contextProperties, device_ids.size(),
-        device_ids.data (), nullptr,
+        contextProperties, gpu_ids.size(),
+        gpu_ids.data (), nullptr,
         nullptr, &error); 
     CheckError(error);
 }
