@@ -42,7 +42,7 @@ float art_visc(float2 x_i, float2 x_j, float r_i, float r_j, float2 v_i, float2 
 
     if (dot(x, v_i - v_j) <= 0)
     {
-        float ca = (sqrt(1.4 * p_i / r_i) + sqrt(1.4 * p_j / r_j)) / 2;
+        float ca = (sqrt(fabs(1.4 * p_i / r_i)) + sqrt(fabs(1.4 * p_j / r_j))) / 2;
         float ra = (r_i + r_j) / 2;
         float mu = h * dot(v_i - v_j, x) / (pow(length(x), 2) + neta*neta);
         pia = (-alpha * ca * mu + beta * mu * mu) / ra;

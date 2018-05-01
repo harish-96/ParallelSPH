@@ -60,8 +60,8 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 {
     uniform_real_distribution<double> randx(0,box_size_x);
     uniform_real_distribution<double> randy(0,box_size_y);
-    uniform_real_distribution<double> rvx(1, -1);
-    uniform_real_distribution<double> rvy(1, -1);
+    uniform_real_distribution<double> rvx(0, 1);
+    uniform_real_distribution<double> rvy(0, 1);
     default_random_engine rex, rey, revx, revy;
     rex.seed(time(NULL));
     rey.seed(time(NULL));
@@ -70,14 +70,10 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 
     for (int i=0; i < x.size(); i++)
     {
-        /* x[i].s[0] = i * dx; */
-        /* x[i].s[1] = i * dx; */
-        v[i].s[0] = 0;
-        v[i].s[1] = 0;
         x[i].s[0] = randx(rex);
         x[i].s[1] = randy(rey);
-        /* v[i].s[0] = rvx(revx); */
-        /* v[i].s[1] = rvy(revy); */
+        v[i].s[0] = rvx(revx);
+        v[i].s[1] = rvy(revy);
         r[i] = 1000;
     }
     for (int i=0; i < xw.size(); i++)
@@ -158,53 +154,53 @@ int main(int argc, char *argv[])
 
     cl_mem buf_x, buf_xw, buf_r, buf_rw, buf_v, buf_vw, buf_p, buf_pw;
 
-	buf_x = clCreateBuffer(context,
+    buf_x = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float2)*numpts, x.data(),
                           &error);
-	CheckError(error);
-    
-	buf_xw = clCreateBuffer(context,
+    CheckError(error);
+
+    buf_xw = clCreateBuffer(context,
                            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                            sizeof(cl_float2)*Nw, xw.data(),
                            &error);
-	CheckError(error);
+    CheckError(error);
 
-	buf_r = clCreateBuffer(context,
+    buf_r = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float)*numpts, r.data(),
                           &error);
-	CheckError(error);
+    CheckError(error);
 
-	buf_rw = clCreateBuffer(context,
+    buf_rw = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float)*Nw, rw.data(),
                           &error);
-	CheckError(error);
-    
-	buf_p = clCreateBuffer(context,
+    CheckError(error);
+
+    buf_p = clCreateBuffer(context,
                           CL_MEM_READ_WRITE,
                           sizeof(cl_float)*numpts, NULL,
                           &error);
-	CheckError(error);
+    CheckError(error);
 
-	buf_pw = clCreateBuffer(context,
+    buf_pw = clCreateBuffer(context,
                           CL_MEM_READ_WRITE,
                           sizeof(cl_float)*Nw, NULL,
                           &error);
-	CheckError(error);
+    CheckError(error);
 
-	buf_v = clCreateBuffer(context,
+    buf_v = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float2)*numpts, v.data(),
                           &error);
-	CheckError(error);
-    
-	buf_vw = clCreateBuffer(context,
+    CheckError(error);
+
+    buf_vw = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
                           sizeof(cl_float2)*Nw, vw.data(),
                           &error);
-	CheckError(error);
+    CheckError(error);
 
     /* BUILD PROGRAM, CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
     char options[] = "-g";
