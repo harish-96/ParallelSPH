@@ -55,14 +55,29 @@ void readParams(string filename, string &output_dir, int* numpts, int*Nw, float*
 }
 
 void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
-            vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw, float dx)
+            vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw,
+            float dx, float box_size_x, float box_size_y)
 {
+    uniform_real_distribution<double> randx(0,box_size_x);
+    uniform_real_distribution<double> randy(0,box_size_y);
+    uniform_real_distribution<double> rvx(1, -1);
+    uniform_real_distribution<double> rvy(1, -1);
+    default_random_engine rex, rey, revx, revy;
+    rex.seed(time(NULL));
+    rey.seed(time(NULL));
+    revx.seed(time(NULL));
+    revy.seed(time(NULL));
+
     for (int i=0; i < x.size(); i++)
     {
-        x[i].s[0] = i * dx;
-        x[i].s[1] = i * dx;
-        v[i].s[0] = 1;
+        /* x[i].s[0] = i * dx; */
+        /* x[i].s[1] = i * dx; */
+        v[i].s[0] = 0;
         v[i].s[1] = 0;
+        x[i].s[0] = randx(rex);
+        x[i].s[1] = randy(rey);
+        /* v[i].s[0] = rvx(revx); */
+        /* v[i].s[1] = rvy(revy); */
         r[i] = 1000;
     }
     for (int i=0; i < xw.size(); i++)
@@ -74,12 +89,12 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
         rw[i] = 100000;
     }
 }
-void saveCheckpoint(int i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
+void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
 {
     int numpts = x.size();
     char* command = (char*)("mkdir -p " + output_dir).c_str();
     system(command);
-    string filename = output_dir + "/" + to_string(i) + ".csv";
+    string filename = output_dir + "/" + i + ".csv";
     ofstream f(filename); 
     f << "Particle Number,X pos,Y pos,X vel,Y vel,Density,Pressure\n";
     CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
@@ -135,7 +150,7 @@ int main(int argc, char *argv[])
 
     vector<cl_float2> x(numpts), xw(Nw), vw(Nw), v(numpts);
     vector<cl_float> r(numpts), rw(Nw), p(numpts), pw(Nw);
-    set_ic(x, xw, v, vw, r, rw, dx);
+    set_ic(x, xw, v, vw, r, rw, dx, box_size_x, box_size_y);
 
     cl_context context;
     cl_device_id did;
@@ -292,28 +307,9 @@ int main(int argc, char *argv[])
                                           0, NULL, &event));
         if (i % saveFreq == 0)
         {
-            saveCheckpoint(i, output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
+            saveCheckpoint(to_string(i), output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
         }
     }
 
-    CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
-                                       sizeof(cl_float)*numpts, p.data(),
-                                       0, nullptr, nullptr));
-    CheckError(clEnqueueReadBuffer(Q, buf_r, true, 0,
-                                       sizeof(cl_float)*numpts, r.data(),
-                                       0, nullptr, nullptr));
-    CheckError(clEnqueueReadBuffer(Q, buf_v, true, 0,
-                                       sizeof(cl_float2)*numpts, v.data(),
-                                       0, nullptr, nullptr));
-    CheckError(clEnqueueReadBuffer(Q, buf_x, true, 0,
-                                       sizeof(cl_float2)*numpts, x.data(),
-                                       0, nullptr, nullptr));
-    /* for (int i=0; i < x.size(); i++) */
-    /* { */
-    /*     cout << "\n\nParticle number" << i << endl; */
-    /*     cout << "Density :" << r[i] << endl; */
-    /*     cout << "Pressure : " << p[i] << endl; */
-    /*     cout << "x : " << x[i].s[0] << "\t y : " << x[i].s[1] << endl; */
-    /*     cout << "Velx : " << v[i].s[0] << "\t Vely : " << v[i].s[1] << endl; */
-    /* } */
+    saveCheckpoint("final", output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
 }

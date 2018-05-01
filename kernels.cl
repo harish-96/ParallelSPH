@@ -56,7 +56,7 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 
 	const int i = get_global_id(0);
     float2 tmp = 0;
-    float e_con = 0.; //CHANGE THIS
+    float e_con = 0.5;
 
     for(int j = 0; j < N; j++)
     {
@@ -68,16 +68,16 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 }
 
 // N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
-//__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
-//{
-//	const int i = get_global_id(0);
-//    r[i] = 0;
-//
-//    for (int j=0; j<N; j++)
-//        r[i] += m * kernel_cubic(x[i], x[j], h);
-//    //for (int j=0; j<Nw; j++)
-//    //    r[i] += m * kernel_cubic(x[i], xw[j], h);
-//}
+__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
+{
+	const int i = get_global_id(0);
+    r[i] = 0;
+
+    for (int j=0; j<N; j++)
+        r[i] += m * kernel_cubic(x[i], x[j], h);
+    for (int j=0; j<Nw; j++)
+        r[i] += m * kernel_cubic(x[i], xw[j], h);
+}
 
 __kernel void DEN(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* r, __global float* rw, float m, float h, float dt, int N, int Nw)
 {
