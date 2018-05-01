@@ -61,7 +61,7 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
     for(int j = 0; j < N; j++)
     {
         float W = kernel_cubic(x[i], x[j], h);
-        tmp -= e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
+        tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
     }
 
     x[i] += (tmp + v[i]) * dt;
