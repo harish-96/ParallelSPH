@@ -60,7 +60,7 @@ __kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float*
 
     for(int j = 0; j < N; j++)
     {
-        float W = kernel_cubic(x[i], x[j], h)
+        float W = kernel_cubic(x[i], x[j], h);
 		// here
         tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
     }
@@ -152,7 +152,7 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
     {
     	num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
         num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
-        den_w += kernel_cubic(xw[i], x[j], h) + 0.1*pow(h,5);
+        den_w += kernel_cubic(xw[i], x[j], h) + pow(h, -2) * 1e-16;
     }
 
     vw[i] = - num_v_w/den_w;
