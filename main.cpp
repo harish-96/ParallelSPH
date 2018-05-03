@@ -68,19 +68,24 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
     revx.seed(time(NULL));
     revy.seed(time(NULL));
 
+    float dx1 = box_size_x / pow(x.size(), 0.5);
+    cout << dx1 << endl;
+    float dxw = box_size_x / xw.size();
     for (int i=0; i < x.size(); i++)
     {
-        x[i].s[0] = randx(rex);
-        x[i].s[1] = randy(rey);
-        v[i].s[0] = rvx(revx);
-        v[i].s[1] = rvy(revy);
+        /* x[i].s[0] = i*dx;//randx(rex); */
+        /* x[i].s[1] = i*dx;//randy(rey); */
+        x[i].s[0] = (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
+        x[i].s[1] = ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
+        v[i].s[0] = 1;
+        v[i].s[1] = 0;
         r[i] = 1000;
     }
     for (int i=0; i < xw.size(); i++)
     {
-        xw[i].s[0] = 1000;
-        xw[i].s[1] = 1000;
-        vw[i].s[0] = 1;
+        xw[i].s[0] = box_size_x;
+        xw[i].s[1] = i * dxw;
+        vw[i].s[0] = 0;
         vw[i].s[1] = 0;
         rw[i] = 100000;
     }
@@ -88,7 +93,8 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
 {
     int numpts = x.size();
-    char* command = (char*)("mkdir -p " + output_dir).c_str();
+    string command_str = "mkdir -p " + output_dir;
+    const char* command = command_str.c_str();
     system(command);
     string filename = output_dir + "/" + i + ".csv";
     ofstream f(filename); 
@@ -203,11 +209,10 @@ int main(int argc, char *argv[])
     CheckError(error);
 
     /* BUILD PROGRAM, CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
-    char options[] = "-g";
     cl_program program = CreateProgram(file_to_string("kernels.cl"), context);
     cl_device_id build_list[] = { did };
     clBuildProgram(program, 1, build_list,
-                   options, nullptr, nullptr);
+                   NULL, NULL, NULL);
 
     cl_kernel kernel_den = clCreateKernel(program, "DEN", &error);
     CheckError(error);
