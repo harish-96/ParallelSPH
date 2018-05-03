@@ -4,7 +4,7 @@
 #include <random>
 #include <time.h>
 #include <stdio.h>
-
+#include <algorithm>
 using namespace std;
 
 void readParams(string filename, string &output_dir, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)

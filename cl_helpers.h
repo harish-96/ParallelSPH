@@ -3,8 +3,11 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#ifdef __linux__
+#include <CL/cl.h>
+#elif __APPLE__
 #include "OpenCL/opencl.h"
-
+#endif
 std::vector<cl_platform_id> GetPlatformIDs()
 {
   	cl_uint platform_count;
