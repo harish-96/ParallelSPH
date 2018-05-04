@@ -1,5 +1,5 @@
-Number of fluid particles : 1024
-Number of wall particles : 512
+Number of fluid particles : 256
+Number of wall particles : 256
 Box size x : 1
 Box size y : 1
 Density : 1000

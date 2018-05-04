@@ -107,10 +107,10 @@ __kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0
 
 
 // Launch one kernel per FLUID particle
-__kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw,__global float* r, __global float* rw, float m, int N, int Nw, float dt, float h)
+__kernel void DELTA_V(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw, __global float2* dv, __global float* r, __global float* rw, float m, int N, int Nw, float dt, float h)
 {
 	const int i = get_global_id(0);
-    float2 dv = 0;
+    dv[i] = 0;
 	
     for (int j=0; j<N; j++)
     {
@@ -121,7 +121,7 @@ __kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float
         
             float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
 
-            dv += - m * calc * dW;
+            dv[i] += - m * calc * dW;
         }
     }
 
@@ -134,11 +134,18 @@ __kernel void UPDATE_VEL(__global float2* x, __global float2* xw, __global float
         
             float calc = (pw[j] / rw[j] / rw[j] + p[i] / r[i] / r[i] + av);
 
-            dv += - m * calc * dW;
+            dv[i] += - m * calc * dW;
         }
     }
-    v[i] += dv * dt;
 }
+
+
+__kernel void UPDATE_VEL(__global float2* v, global float2* dv)
+{
+    const int i = get_global_id(0);
+    v[i] += dv[i];
+}
+
 
 // Launch one kernel per wall particle
 __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N)

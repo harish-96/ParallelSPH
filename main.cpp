@@ -7,19 +7,19 @@
 #include <algorithm>
 using namespace std;
 
-void readParams(string filename, string &output_dir, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* viscosity, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)
+void readParams(string filename, string &output_dir, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)
 {
 
-    int nf = 8; //Number of floating point parameters
+    int nf = 7; //Number of floating point parameters
     int nd = 4; //Number of integer parameters
     
     int *d_vars[] = { numpts, Nw, local_size, saveFreq };
-    float *f_vars[] = { box_size_x,  box_size_y, density, viscosity, velocity, total_t, dt, h };
+    float *f_vars[] = { box_size_x,  box_size_y, density, velocity, total_t, dt, h };
 
     string d_params[] = {"number of fluid particles : ", "number of wall particles : ",
                          "threads per block : ", "checkpoint save frequency : "};
     string f_params[] = {"box size x : ", "box size y : ", "density : ",
-                         "viscosity : ", "velocity : ", "simulation time : ",
+                         "velocity : ", "simulation time : ",
                          "time step : ", "kernel size : "};
 
     ifstream f(filename);
@@ -56,7 +56,8 @@ void readParams(string filename, string &output_dir, int* numpts, int*Nw, float*
 
 void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
             vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw,
-            float dx, float box_size_x, float box_size_y)
+            float dx, float box_size_x, float box_size_y, float veloctiy,
+            float density)
 {
     uniform_real_distribution<double> randx(0,box_size_x);
     uniform_real_distribution<double> randy(0,box_size_y);
@@ -77,9 +78,9 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
         /* x[i].s[1] = i*dx;//randy(rey); */
         x[i].s[0] = (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
         x[i].s[1] = ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
-        v[i].s[0] = 1;
+        v[i].s[0] = veloctiy;
         v[i].s[1] = 0;
-        r[i] = 1000;
+        r[i] = density;
     }
     for (int i=0; i < xw.size(); i++)
     {
@@ -134,7 +135,7 @@ int main(int argc, char *argv[])
     float box_size_x, box_size_y, rho0, viscosity, velocity, total_t, dt, h;
 
     readParams(input_params, output_dir, &numpts, &Nw, &box_size_x, &box_size_y,
-               &rho0, &viscosity, &velocity, &total_t,
+               &rho0, &velocity, &total_t,
                &local_size, &dt, &h, &saveFreq);
 
 
@@ -152,13 +153,14 @@ int main(int argc, char *argv[])
 
     vector<cl_float2> x(numpts), xw(Nw), vw(Nw), v(numpts);
     vector<cl_float> r(numpts), rw(Nw), p(numpts), pw(Nw);
-    set_ic(x, xw, v, vw, r, rw, dx, box_size_x, box_size_y);
+    set_ic(x, xw, v, vw, r, rw, dx, box_size_x, box_size_y,
+           velocity, rho0);
 
     cl_context context;
     cl_device_id did;
     initialize_opencl(&context, &did);
 
-    cl_mem buf_x, buf_xw, buf_r, buf_rw, buf_v, buf_vw, buf_p, buf_pw;
+    cl_mem buf_x, buf_xw, buf_r, buf_rw, buf_v, buf_dv, buf_vw, buf_p, buf_pw;
 
     buf_x = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
@@ -208,6 +210,12 @@ int main(int argc, char *argv[])
                           &error);
     CheckError(error);
 
+    buf_dv = clCreateBuffer(context,
+                          CL_MEM_READ_WRITE,
+                          sizeof(cl_float2)*numpts, NULL,
+                          &error);
+    CheckError(error);
+
     /* BUILD PROGRAM, CREATE KERNEL, SET ARGS, CREATE COMMAND QUEUE, LAUNCH KERNELS */
     cl_program program = CreateProgram(file_to_string("kernels.cl"), context);
     cl_device_id build_list[] = { did };
@@ -221,6 +229,9 @@ int main(int argc, char *argv[])
     CheckError(error);
 
     cl_kernel kernel_p = clCreateKernel(program, "INCOMP_P", &error);
+    CheckError(error);
+
+    cl_kernel kernel_dv = clCreateKernel(program, "DELTA_V", &error);
     CheckError(error);
 
     cl_kernel kernel_vel = clCreateKernel(program, "UPDATE_VEL", &error);
@@ -254,19 +265,23 @@ int main(int argc, char *argv[])
 	clSetKernelArg(kernel_p, 2, sizeof(float), &c0);
 	clSetKernelArg(kernel_p, 3, sizeof(float), &rho0);
 
-	clSetKernelArg(kernel_vel, 0, sizeof(cl_mem), &buf_x);
-	clSetKernelArg(kernel_vel, 1, sizeof(cl_mem), &buf_xw);
-	clSetKernelArg(kernel_vel, 2, sizeof(cl_mem), &buf_p);
-	clSetKernelArg(kernel_vel, 3, sizeof(cl_mem), &buf_pw);
-	clSetKernelArg(kernel_vel, 4, sizeof(cl_mem), &buf_v);
-	clSetKernelArg(kernel_vel, 5, sizeof(cl_mem), &buf_vw);
-	clSetKernelArg(kernel_vel, 6, sizeof(cl_mem), &buf_r);
-	clSetKernelArg(kernel_vel, 7, sizeof(cl_mem), &buf_rw);
-	clSetKernelArg(kernel_vel, 8, sizeof(float), &m);
-	clSetKernelArg(kernel_vel, 9, sizeof(int), &numpts);
-	clSetKernelArg(kernel_vel, 10, sizeof(int), &Nw);
-	clSetKernelArg(kernel_vel, 11, sizeof(float), &dt);
-	clSetKernelArg(kernel_vel, 12, sizeof(float), &h);
+	clSetKernelArg(kernel_dv, 0, sizeof(cl_mem), &buf_x);
+	clSetKernelArg(kernel_dv, 1, sizeof(cl_mem), &buf_xw);
+	clSetKernelArg(kernel_dv, 2, sizeof(cl_mem), &buf_p);
+	clSetKernelArg(kernel_dv, 3, sizeof(cl_mem), &buf_pw);
+	clSetKernelArg(kernel_dv, 4, sizeof(cl_mem), &buf_v);
+	clSetKernelArg(kernel_dv, 5, sizeof(cl_mem), &buf_vw);
+	clSetKernelArg(kernel_dv, 6, sizeof(cl_mem), &buf_dv);
+	clSetKernelArg(kernel_dv, 7, sizeof(cl_mem), &buf_r);
+	clSetKernelArg(kernel_dv, 8, sizeof(cl_mem), &buf_rw);
+	clSetKernelArg(kernel_dv, 9, sizeof(float), &m);
+	clSetKernelArg(kernel_dv, 10, sizeof(int), &numpts);
+	clSetKernelArg(kernel_dv, 11, sizeof(int), &Nw);
+	clSetKernelArg(kernel_dv, 12, sizeof(float), &dt);
+	clSetKernelArg(kernel_dv, 13, sizeof(float), &h);
+
+	clSetKernelArg(kernel_vel, 0, sizeof(cl_mem), &buf_v);
+	clSetKernelArg(kernel_vel, 1, sizeof(cl_mem), &buf_dv);
 
 	clSetKernelArg(kernel_wall, 0, sizeof(cl_mem), &buf_x);
 	clSetKernelArg(kernel_wall, 1, sizeof(cl_mem), &buf_xw);
@@ -291,6 +306,11 @@ int main(int argc, char *argv[])
                                       0, NULL, &event));
     for (int i=0; i < nTime; i++)
     {
+        if (i % saveFreq == 0)
+        {
+            saveCheckpoint(to_string(i), output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
+        }
+
         CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1,
                                           NULL, global_work_size_w, local_work_size,
                                           0, NULL, &event));
@@ -300,16 +320,15 @@ int main(int argc, char *argv[])
         CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
-        CheckError(clEnqueueNDRangeKernel(Q, kernel_vel, 1,
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_dv, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
+        /* CheckError(clEnqueueNDRangeKernel(Q, kernel_vel, 1, */
+        /*                                   NULL, global_work_size, local_work_size, */
+        /*                                   0, NULL, &event)); */
         CheckError(clEnqueueNDRangeKernel(Q, kernel_pos, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
-        if (i % saveFreq == 0)
-        {
-            saveCheckpoint(to_string(i), output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
-        }
     }
 
     saveCheckpoint("final", output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
