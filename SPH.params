@@ -1,9 +1,8 @@
 Number of fluid particles : 256
-Number of wall particles : 256
+Number of wall particles : 1009
 Box size x : 1
 Box size y : 1
 Density : 1000
-Viscosity : 0.1
 Velocity : 1
 Simulation time : 0.1
 Threads per block : 256
@@ -11,3 +10,4 @@ Time step : 0.0005
 Kernel size : 0.01
 Checkpoint save frequency : 1
 Output Directory : ./output
+Geometry file : airfoil_wall.csv

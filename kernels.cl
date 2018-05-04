@@ -51,57 +51,89 @@ float art_visc(float2 x_i, float2 x_j, float r_i, float r_j, float2 v_i, float2 
 }
 
 
-__kernel void UPDATE_POS(__global float2* x, __global float2* v, __global float* r, float m, float h, int N, float dt)
+// Launch one kernel per FLUID particle
+__kernel void DELTA_X(__global float2* x, __global float2* dx, __global float2* v, __global float* r, float m, float h, int N, float dt)
 {
 
 	const int i = get_global_id(0);
-    float2 tmp = 0;
-    float e_con = 0.5;
 
-    for(int j = 0; j < N; j++)
-    {
-        float W = kernel_cubic(x[i], x[j], h);
-		// here
-        tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
+    if (i < N){
+        dx[i] = 0;
+        float2 tmp = 0;
+        float e_con = 0.5;
+
+        for(int j = 0; j < N; j++)
+        {
+            float W = kernel_cubic(x[i], x[j], h);
+            tmp += e_con * (m * 2 / (r[j] + r[i])) * (v[j] - v[i]) * W;
+        }
+
+        dx[i] += (tmp + v[i]) * dt;
     }
-
-    x[i] += (tmp + v[i]) * dt;
-}
-
-// N = number of fluid particles. Nw = wall particles. Launch one kernel per fluid particle
-__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
-{
-	const int i = get_global_id(0);
-    r[i] = 0;
-
-    for (int j=0; j<N; j++)
-        r[i] += m * kernel_cubic(x[i], x[j], h);
-    for (int j=0; j<Nw; j++)
-        r[i] += m * kernel_cubic(x[i], xw[j], h);
-}
-
-__kernel void DEN(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* r, __global float* rw, float m, float h, float dt, int N, int Nw)
-{
-	const int i = get_global_id(0);
-    float dr = 0;
-    for (int j=0; j<N; j++)
-    {
-        dr += 1 / r[j] * dot(v[i] - v[j], kernel_derivative(x[i], x[j], h));
-    }
-    for (int j=0; j<Nw; j++)
-    {
-        dr += 1 / rw[j] * dot(v[i] - vw[j], kernel_derivative(x[i], xw[j], h));
-    }
-    r[i] += dr * m * r[i] * dt;
 }
 
 // Launch one kernel per FLUID particle
-__kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0)
+__kernel void UPDATE_POS(__global float2* x, __global float2* dx, int N)
+{
+    const int i = get_global_id(0);
+    if (i < N){
+        x[i] += dx[i];
+    }
+}
+
+// Launch one kernel per FLUID particle
+__kernel void SUMDEN(__global float2* x, __global float2* xw, __global float* r, float m, float h, int N, int Nw)
 {
 	const int i = get_global_id(0);
-    float B = rho0 * c0 * c0 / gamma;
-    double tmp = pow((double)r[i] / rho0, (double)gamma) - 1;
-    p[i] = B * (tmp) ;
+
+    if (i < N){
+        r[i] = 0;
+
+        for (int j=0; j<N; j++)
+            r[i] += m * kernel_cubic(x[i], x[j], h);
+        for (int j=0; j<Nw; j++)
+            r[i] += m * kernel_cubic(x[i], xw[j], h);
+    }
+}
+
+// Launch one kernel per FLUID particle
+__kernel void DELTA_DEN(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* r, __global float* rw, __global float* dr, float m, float h, float dt, int N, int Nw)
+{
+	const int i = get_global_id(0);
+    if (i < N){
+        dr[i] = 0;
+        float tmp = 0;
+        for (int j=0; j<N; j++)
+        {
+            tmp += 1 / r[j] * dot(v[i] - v[j], kernel_derivative(x[i], x[j], h));
+        }
+        for (int j=0; j<Nw; j++)
+        {
+            tmp += 1 / rw[j] * dot(v[i] - vw[j], kernel_derivative(x[i], xw[j], h));
+        }
+        dr[i] = tmp * m * r[i] * dt;
+    }
+}
+
+// Launch one kernel per FLUID particle
+__kernel void UPDATE_DEN(__global float* r, global float* dr, int N)
+{
+    const int i = get_global_id(0);
+    if (i < N){
+        r[i] += dr[i];
+    }
+}
+
+// Launch one kernel per FLUID particle
+__kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0, int N)
+{
+	const int i = get_global_id(0);
+
+    if (i < N){
+        float B = rho0 * c0 * c0 / gamma;
+        double tmp = pow((double)r[i] / rho0, (double)gamma) - 1;
+        p[i] = B * (tmp) ;
+    }
     
 }
 
@@ -110,66 +142,75 @@ __kernel void INCOMP_P(__global float* r,__global float* p, float c0, float rho0
 __kernel void DELTA_V(__global float2* x, __global float2* xw, __global float* p, __global float* pw, __global float2* v, __global float2* vw, __global float2* dv, __global float* r, __global float* rw, float m, int N, int Nw, float dt, float h)
 {
 	const int i = get_global_id(0);
-    dv[i] = 0;
-	
-    for (int j=0; j<N; j++)
-    {
-        if (distance(x[i], x[j]) < 2*h)
-        {
-            float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p[i], p[j], h);
-            float2 dW = kernel_derivative(x[i], x[j], h);
-        
-            float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
 
-            dv[i] += - m * calc * dW;
+    if (i < N){
+        dv[i] = 0;
+        
+        for (int j=0; j<N; j++)
+        {
+            if (distance(x[i], x[j]) < 2*h)
+            {
+                float av = art_visc(x[i], x[j], r[i], r[j], v[i], v[j], p[i], p[j], h);
+                float2 dW = kernel_derivative(x[i], x[j], h);
+            
+                float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
+
+                dv[i] += - m * calc * dW;
+            }
         }
-    }
 
-    for (int j=0; j<Nw; j++)
-    {
-        if (distance(x[i], xw[j]) < 2*h)
+        for (int j=0; j<Nw; j++)
         {
-            float av = art_visc(x[i], xw[j], r[i], rw[j], v[i], vw[j], p[i], pw[j], h);
-            float2 dW = kernel_derivative(x[i], xw[j], h);
-        
-            float calc = (pw[j] / rw[j] / rw[j] + p[i] / r[i] / r[i] + av);
+            if (distance(x[i], xw[j]) < 2*h)
+            {
+                float av = art_visc(x[i], xw[j], r[i], rw[j], v[i], vw[j], p[i], pw[j], h);
+                float2 dW = kernel_derivative(x[i], xw[j], h);
+            
+                float calc = (pw[j] / rw[j] / rw[j] + p[i] / r[i] / r[i] + av);
 
-            dv[i] += - m * calc * dW;
+                dv[i] += - m * calc * dW;
+            }
         }
     }
 }
 
 
-__kernel void UPDATE_VEL(__global float2* v, global float2* dv)
+__kernel void UPDATE_VEL(__global float2* v, global float2* dv, int N)
 {
     const int i = get_global_id(0);
-    v[i] += dv[i];
+
+    if (i < N){
+        v[i] += dv[i];
+    }
 }
 
 
 // Launch one kernel per wall particle
-__kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N)
+__kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, __global float2* vw, __global float* p, __global float* pw, __global float* rw, float h, float rho0, float c0, int N, int Nw)
 {
 	const int i = get_global_id(0);
-    float2 num_v_w = 0;
-    float num_p_w =0;
-    float den_w = 0;
-	
-    for (int j=0; j<N ; j++)
-    {
-    	num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
-        num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
-        den_w += kernel_cubic(xw[i], x[j], h) + pow(h, -2) * 1e-16;
-    }
 
-    vw[i] = - num_v_w/den_w;
-    pw[i] = num_p_w/den_w;
-	
-    float B = rho0 * c0 * c0 / gamma;
-    double tmp = pw[i]/B + 1; 
-    double tmp1 = 1/gamma;
-    double tmp2 =  pow((double) tmp, (double) tmp1);
-    rw[i] = rho0 * (tmp2) ;
+    if (i < Nw){
+        float2 num_v_w = 0;
+        float num_p_w =0;
+        float den_w = 0;
+        
+        for (int j=0; j<N ; j++)
+        {
+            num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
+            num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
+            den_w += kernel_cubic(xw[i], x[j], h) + pow(h, -2) * 1e-16;
+        }
+
+        vw[i] = - num_v_w/den_w;
+        pw[i] = num_p_w/den_w;
+        
+        float B = rho0 * c0 * c0 / gamma;
+        double tmp = pw[i]/B + 1; 
+        double tmp1 = 1/gamma;
+        double tmp2 =  pow((double) tmp, (double) tmp1);
+        rw[i] = rho0 * (tmp2) ;
+    }
 }
 
 __kernel void REDUCE(__global float *blk_sum, __global float *ret, 
