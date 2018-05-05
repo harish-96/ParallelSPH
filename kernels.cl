@@ -199,7 +199,7 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
         {
             num_v_w += v[j]*kernel_cubic(xw[i], x[j], h);
             num_p_w += p[j]*kernel_cubic(xw[i], x[j], h);
-            den_w += kernel_cubic(xw[i], x[j], h) + pow(h, -2) * 1e-16;
+            den_w += kernel_cubic(xw[i], x[j], h) + 1e-10;
         }
 
         vw[i] = - num_v_w/den_w;

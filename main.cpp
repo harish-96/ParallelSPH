@@ -7,17 +7,17 @@
 #include <algorithm>
 using namespace std;
 
-void readParams(string filename, string &output_dir, string &geometry_file, int* numpts, int*Nw, float* box_size_x, float* box_size_y, float* density, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)
+void readParams(string filename, string &output_dir, string &geometry_file, int* numpts, float* box_size_x, float* box_size_y, float* density, float* velocity, float* total_t, int* local_size, float *dt, float *h, int* saveFreq)
 {
 
     int nf = 7; //Number of floating point parameters
-    int nd = 4; //Number of integer parameters
+    int nd = 3; //Number of integer parameters
     
-    int *d_vars[] = { numpts, Nw, local_size, saveFreq };
+    int *d_vars[] = { numpts, local_size, saveFreq };
     float *f_vars[] = { box_size_x,  box_size_y, density, velocity, total_t, dt, h };
 
-    string d_params[] = {"number of fluid particles : ", "number of wall particles : ",
-                         "threads per block : ", "checkpoint save frequency : "};
+    string d_params[] = {"number of fluid particles : ", "threads per block : ",
+                         "checkpoint save frequency : "};
     string f_params[] = {"box size x : ", "box size y : ", "density : ",
                          "velocity : ", "simulation time : ",
                          "time step : ", "kernel size : "};
@@ -58,13 +58,13 @@ void readParams(string filename, string &output_dir, string &geometry_file, int*
 
 void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
             vector<cl_float2> &vw, vector<cl_float> &r, vector<cl_float> &rw,
-            float dx, float box_size_x, float box_size_y, float veloctiy,
+            float dx, float box_size_x, float box_size_y, float velocity,
             float density, string input_geometry)
 {
     uniform_real_distribution<double> randx(0,box_size_x);
     uniform_real_distribution<double> randy(0,box_size_y);
-    uniform_real_distribution<double> rvx(0, 1);
-    uniform_real_distribution<double> rvy(0, 1);
+    uniform_real_distribution<double> rvx(-velocity, velocity);
+    uniform_real_distribution<double> rvy(-velocity, velocity);
     default_random_engine rex, rey, revx, revy;
     rex.seed(time(NULL));
     rey.seed(time(NULL));
@@ -77,7 +77,9 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
     {
         x[i].s[0] = -2 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
         x[i].s[1] = ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
-        v[i].s[0] = veloctiy;
+        /* v[i].s[0] = rvx(revx); */
+        /* v[i].s[1] = rvy(revy); */
+        v[i].s[0] = velocity;
         v[i].s[1] = 0;
         r[i] = density;
     }
@@ -102,6 +104,7 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 
         vw[i].s[0] = 0;
         vw[i].s[1] = 0;
+        rw[i] = 1000;
     }
 }
 void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
@@ -134,6 +137,19 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
     f.close();
 }
 
+int getNumLines(string geometry_file)
+{
+    int Nw = 0;
+    string line;
+    ifstream myfile(geometry_file);
+
+    while (getline(myfile, line))
+    {
+        Nw++;
+    }
+    return Nw;
+}
+
 int main(int argc, char *argv[])
 {
     string input_params, output_dir, geometry_file;
@@ -144,13 +160,14 @@ int main(int argc, char *argv[])
         exit(1);
     }
     cl_int error;
-    int numpts, Nw, local_size, saveFreq;
+    int numpts, local_size, Nw, saveFreq;
     float box_size_x, box_size_y, rho0, viscosity, velocity, total_t, dt, h;
 
-    readParams(input_params, output_dir, geometry_file, &numpts, &Nw, &box_size_x, &box_size_y,
+    readParams(input_params, output_dir, geometry_file, &numpts, &box_size_x, &box_size_y,
                &rho0, &velocity, &total_t,
                &local_size, &dt, &h, &saveFreq);
 
+    Nw = getNumLines(geometry_file);
 
     float c0 = 10;
     float dx = h/1.1, m = rho0 * dx * dx;
