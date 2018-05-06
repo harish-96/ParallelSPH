@@ -71,14 +71,12 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
     revx.seed(time(NULL));
     revy.seed(time(NULL));
 
-    float dx1 = box_size_x / pow(x.size(), 0.5);
-    float dxw = box_size_x / xw.size();
+    double dx1 = (double)box_size_x / pow(x.size(), 0.5);
+    double dxw = (double)box_size_x / xw.size();
     for (int i=0; i < x.size(); i++)
     {
-        x[i].s[0] = -.1 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
-        x[i].s[1] = 0.2 + ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
-        /* v[i].s[0] = rvx(revx); */
-        /* v[i].s[1] = rvy(revy); */
+        x[i].s[0] = -1.1 + (i % (int)pow(x.size(), 0.5))*dx1;
+        x[i].s[1] = ((i / (int)pow(x.size(), 0.5)))*dx1;
         v[i].s[0] = velocity;
         v[i].s[1] = 0;
         r[i] = density;
@@ -95,7 +93,7 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
             int pos = line.find(",");
             char* pEnd;
             xw[i].s[0] = (float)strtof(line.substr(0, pos).c_str(), &pEnd);
-            xw[i].s[1] = (float)strtof(line.substr(pos).c_str(), &pEnd);
+            xw[i].s[1] = (float)strtof(line.substr(pos+1).c_str(), &pEnd);
             i++;
         }
     }
@@ -114,7 +112,7 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
     ofstream f(filename); 
     f << "Particle Number,X pos,Y pos,X vel,Y vel,Density,Pressure\n";
 
-    vector <float> pw(Nw), rw(Nw);
+    vector <float> pw(Nw), rw(Nw), d(Nw);
     vector <cl_float2> vw(Nw);
     CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
                                        sizeof(cl_float)*numpts, p.data(),
@@ -148,7 +146,7 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
 
     filename = "./wall/" + i + ".csv";
     ofstream f1(filename); 
-    f1 << "Particle Number,X vel,Y vel,Density,Pressure\n";
+    f1 << "Particle Number,X vel,Y vel,Density,Pressure,Dist\n";
     for (int i=0; i < rw.size(); i++)
     {
         f1 << i << "," << vw[i].s[0] << "," << vw[i].s[1] << ",";
@@ -167,7 +165,6 @@ int getNumLines(string geometry_file)
     {
         Nw++;
     }
-    cout << "Number of wall particles" << Nw << endl ;
     return Nw;
 }
 
@@ -212,7 +209,7 @@ int main(int argc, char *argv[])
     initialize_opencl(&context, &did);
 
     cl_mem buf_x, buf_xw, buf_r, buf_rw, buf_v, buf_tmpf,
-           buf_vw, buf_p, buf_pw, buf_tmpf2;
+           buf_vw, buf_p, buf_pw, buf_tmpf2, buf_d;
 
     buf_x = clCreateBuffer(context,
                           CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,

@@ -44,16 +44,5 @@ for i in range (file_count):
     plt.xlim(-3,5)
     plt.ylim(-2,3)
     plt.pause(1e-17)
-    time.sleep(0.01)
+    time.sleep(0.001)
 
-# '''xdata.append(x1[i])
-#     ydata.append(y1[i])
-#     line.set_xdata(xdata)
-#     line.set_ydata(ydata)
-#     plt.draw()
-#     plt.pause(1e-17)
-#     time.sleep(0.1)
- 
-# # add this if you don't want the window to disappear at the end
-# plt.show()'''
-# plt.show()

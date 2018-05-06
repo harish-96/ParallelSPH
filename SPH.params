@@ -1,9 +1,9 @@
-Number of fluid particles : 1
+Number of fluid particles : 1024
 Box size x : 1
 Box size y : 1
 Density : 100
 Velocity : 1
-Simulation time : 0.3
+Simulation time : 3
 Threads per block : 256
 Time step : 0.00055
 Kernel size : 0.011

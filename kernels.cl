@@ -162,7 +162,7 @@ __kernel void DELTA_V(__global float2* x, __global float2* xw, __global float* p
             
                 float calc = (p[j] / r[j] / r[j] + p[i] / r[i] / r[i] + av);
 
-                dv[i] += - m * calc * dW;
+                dv[i] += - m * calc * dW * dt;
             }
         }
 
@@ -175,14 +175,14 @@ __kernel void DELTA_V(__global float2* x, __global float2* xw, __global float* p
             
                 float calc = (pw[j] / rw[j] / rw[j] + p[i] / r[i] / r[i] + av);
 
-                dv[i] += - m * calc * dW;
+                dv[i] += - m * calc * dW * dt;
             }
         }
     }
 }
 
 
-__kernel void UPDATE_VEL(__global float2* v, global float2* dv, int N)
+__kernel void UPDATE_VEL(__global float2* v, __global float2* dv, int N)
 {
     const int i = get_global_id(0);
 
@@ -206,14 +206,12 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
         for (int j=0; j<N ; j++)
         {
             float kernel_output = kernel_cubic(xw[i], x[j], h);
-            if (fabs(kernel_output) > 1e-16){
-                num_v_w += v[j] * kernel_output;
-                num_p_w += p[j] * kernel_output;
-                den_w += kernel_output;
-            }
+            num_v_w += v[j] * kernel_output;
+            num_p_w += p[j] * kernel_output;
+            den_w += kernel_output;
         }
 
-        if (fabs(den_w) > 1e-30){
+        if (fabs(den_w) > 1e-16){
             vw[i] =  -(num_v_w/den_w);
             pw[i] = num_p_w/den_w;
         }
@@ -231,13 +229,6 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
 
         if ( rw[i] < rho0 ) rw[i] = rho0;
     }
-}
-
-__kernel void DIST_WALL(__global float* x, __global float2* xw, int N, __global float* d)
-{
-    const int i = get_global_id(0);
-    for(int j=0; j<N; j++)
-        d[i] = distance(xw[i], x[j]);
 }
 
 __kernel void REDUCE(__global float *blk_sum, __global float *ret, 
