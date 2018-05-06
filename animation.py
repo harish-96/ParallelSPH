@@ -44,7 +44,7 @@ for i in range (file_count):
     plt.xlim(-3,5)
     plt.ylim(-2,3)
     plt.pause(1e-17)
-    time.sleep(0.1)
+    time.sleep(0.01)
 
 # '''xdata.append(x1[i])
 #     ydata.append(y1[i])

@@ -75,7 +75,7 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
     float dxw = box_size_x / xw.size();
     for (int i=0; i < x.size(); i++)
     {
-        x[i].s[0] = -2 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
+        x[i].s[0] = -1.1 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
         x[i].s[1] = ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
         /* v[i].s[0] = rvx(revx); */
         /* v[i].s[1] = rvy(revy); */
@@ -104,10 +104,10 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 
         vw[i].s[0] = 0;
         vw[i].s[1] = 0;
-        rw[i] = 1000;
+        rw[i] = 100;
     }
 }
-void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_r, cl_mem &buf_p, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q)
+void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_vw, cl_mem &buf_r,cl_mem &buf_rw, cl_mem &buf_p,cl_mem &buf_pw, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q, int Nw)
 {
     int numpts = x.size();
     string command_str = "mkdir -p " + output_dir;
@@ -116,6 +116,9 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
     string filename = output_dir + "/" + i + ".csv";
     ofstream f(filename); 
     f << "Particle Number,X pos,Y pos,X vel,Y vel,Density,Pressure\n";
+
+    vector <float> pw(Nw), rw(Nw);
+    vector <cl_float2> vw(Nw);
     CheckError(clEnqueueReadBuffer(Q, buf_p, true, 0,
                                        sizeof(cl_float)*numpts, p.data(),
                                        0, nullptr, nullptr));
@@ -128,6 +131,16 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
     CheckError(clEnqueueReadBuffer(Q, buf_x, true, 0,
                                        sizeof(cl_float2)*numpts, x.data(),
                                        0, nullptr, nullptr));
+
+    CheckError(clEnqueueReadBuffer(Q, buf_vw, true, 0,
+                                       sizeof(cl_float2)*Nw, vw.data(),
+                                       0, nullptr, nullptr));
+    CheckError(clEnqueueReadBuffer(Q, buf_pw, true, 0,
+                                       sizeof(cl_float)*Nw, pw.data(),
+                                       0, nullptr, nullptr));
+    CheckError(clEnqueueReadBuffer(Q, buf_rw, true, 0,
+                                       sizeof(cl_float)*Nw, rw.data(),
+                                       0, nullptr, nullptr));
     
     for (int i=0; i < x.size(); i++)
     {
@@ -135,6 +148,19 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
         f << "," << v[i].s[1] << "," << r[i] << "," << p[i] << endl;
     }
     f.close();
+
+    command_str = "mkdir -p wall";
+    const char* command2 = command_str.c_str();
+    system(command2);
+    filename = "./wall/" + i + ".csv";
+    ofstream f1(filename); 
+    f1 << "Particle Number,X vel,Y vel,Density,Pressure\n";
+    for (int i=0; i < rw.size(); i++)
+    {
+        f1 << i << "," << vw[i].s[0] << "," << vw[i].s[1] << ",";
+        f1 << rw[i] << "," << pw[i] << endl;
+    }
+    f1.close();
 }
 
 int getNumLines(string geometry_file)
@@ -147,6 +173,7 @@ int getNumLines(string geometry_file)
     {
         Nw++;
     }
+    cout << "Number of wall particles" << Nw << endl ;
     return Nw;
 }
 
@@ -296,8 +323,8 @@ int main(int argc, char *argv[])
 	clSetKernelArg(kernel_dr, 10, sizeof(int), &numpts);
 	clSetKernelArg(kernel_dr, 11, sizeof(int), &Nw);
 
-	clSetKernelArg(kernel_den, 0, sizeof(cl_mem), &buf_x);
-	clSetKernelArg(kernel_den, 1, sizeof(cl_mem), &buf_xw);
+	clSetKernelArg(kernel_den, 0, sizeof(cl_mem), &buf_r);
+	clSetKernelArg(kernel_den, 1, sizeof(cl_mem), &buf_tmpf);
 	clSetKernelArg(kernel_den, 2, sizeof(int), &numpts);
 
 	clSetKernelArg(kernel_dx, 0, sizeof(cl_mem), &buf_x);
@@ -360,15 +387,18 @@ int main(int argc, char *argv[])
     CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
                                       NULL, global_work_size, local_work_size,
                                       0, NULL, &event));
+    CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1,
+                                      NULL, global_work_size_w, local_work_size,
+                                      0, NULL, &event));
     for (int i=0; i < nTime; i++)
     {
         if (i % saveFreq == 0)
         {
-            saveCheckpoint(to_string(i), output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
+            saveCheckpoint(to_string(i), output_dir, buf_x, buf_v, buf_vw, buf_r, buf_rw, buf_p, buf_pw, x, v, r, p, Q, Nw);
         }
 
-        CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1,
-                                          NULL, global_work_size_w, local_work_size,
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_dr, 1,
+                                          NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
         CheckError(clEnqueueNDRangeKernel(Q, kernel_den, 1,
                                           NULL, global_work_size, local_work_size,
@@ -388,7 +418,10 @@ int main(int argc, char *argv[])
         CheckError(clEnqueueNDRangeKernel(Q, kernel_pos, 1,
                                           NULL, global_work_size, local_work_size,
                                           0, NULL, &event));
+        CheckError(clEnqueueNDRangeKernel(Q, kernel_wall, 1,
+                                          NULL, global_work_size_w, local_work_size,
+                                          0, NULL, &event));
     }
 
-    saveCheckpoint("final", output_dir, buf_x, buf_v, buf_r, buf_p, x, v, r, p, Q);
+    saveCheckpoint("final", output_dir, buf_x, buf_v, buf_vw, buf_r, buf_rw, buf_p, buf_pw, x, v, r, p, Q, Nw);
 }

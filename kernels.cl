@@ -202,7 +202,7 @@ __kernel void WALL(__global float2* x, __global float2* xw, __global float2* v, 
             den_w += kernel_cubic(xw[i], x[j], h) + 1e-10;
         }
 
-        vw[i] = - num_v_w/den_w;
+        vw[i] =  (num_v_w/den_w) /2;
         pw[i] = num_p_w/den_w;
         
         float B = rho0 * c0 * c0 / gamma;
