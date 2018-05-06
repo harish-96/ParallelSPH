@@ -75,8 +75,8 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
     float dxw = box_size_x / xw.size();
     for (int i=0; i < x.size(); i++)
     {
-        x[i].s[0] = -1.1 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
-        x[i].s[1] = ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
+        x[i].s[0] = -.1 + (i % (int)pow(x.size(), 0.5))*dx1;//randx(rex);
+        x[i].s[1] = 0.2 + ((int)(i / pow(x.size(), 0.5)))*dx1;//randy(rey);
         /* v[i].s[0] = rvx(revx); */
         /* v[i].s[1] = rvy(revy); */
         v[i].s[0] = velocity;
@@ -110,9 +110,6 @@ void set_ic(vector<cl_float2> &x, vector<cl_float2> &xw, vector<cl_float2> &v,
 void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, cl_mem &buf_vw, cl_mem &buf_r,cl_mem &buf_rw, cl_mem &buf_p,cl_mem &buf_pw, vector<cl_float2> &x, vector<cl_float2> &v, vector<cl_float> &r, vector<cl_float> &p, cl_command_queue &Q, int Nw)
 {
     int numpts = x.size();
-    string command_str = "mkdir -p " + output_dir;
-    const char* command = command_str.c_str();
-    system(command);
     string filename = output_dir + "/" + i + ".csv";
     ofstream f(filename); 
     f << "Particle Number,X pos,Y pos,X vel,Y vel,Density,Pressure\n";
@@ -149,9 +146,6 @@ void saveCheckpoint(string i, string output_dir, cl_mem &buf_x, cl_mem &buf_v, c
     }
     f.close();
 
-    command_str = "mkdir -p wall";
-    const char* command2 = command_str.c_str();
-    system(command2);
     filename = "./wall/" + i + ".csv";
     ofstream f1(filename); 
     f1 << "Particle Number,X vel,Y vel,Density,Pressure\n";
@@ -328,13 +322,17 @@ int main(int argc, char *argv[])
 	clSetKernelArg(kernel_den, 2, sizeof(int), &numpts);
 
 	clSetKernelArg(kernel_dx, 0, sizeof(cl_mem), &buf_x);
-	clSetKernelArg(kernel_dx, 1, sizeof(cl_mem), &buf_tmpf2);
-	clSetKernelArg(kernel_dx, 2, sizeof(cl_mem), &buf_v);
-	clSetKernelArg(kernel_dx, 3, sizeof(cl_mem), &buf_r);
-	clSetKernelArg(kernel_dx, 4, sizeof(float), &m);
-	clSetKernelArg(kernel_dx, 5, sizeof(float), &h);
-	clSetKernelArg(kernel_dx, 6, sizeof(int), &numpts);
-	clSetKernelArg(kernel_dx, 7, sizeof(float), &dt);
+	clSetKernelArg(kernel_dx, 1, sizeof(cl_mem), &buf_xw);
+	clSetKernelArg(kernel_dx, 2, sizeof(cl_mem), &buf_tmpf2);
+	clSetKernelArg(kernel_dx, 3, sizeof(cl_mem), &buf_v);
+	clSetKernelArg(kernel_dx, 4, sizeof(cl_mem), &buf_vw);
+	clSetKernelArg(kernel_dx, 5, sizeof(cl_mem), &buf_r);
+	clSetKernelArg(kernel_dx, 6, sizeof(cl_mem), &buf_rw);
+	clSetKernelArg(kernel_dx, 7, sizeof(float), &m);
+	clSetKernelArg(kernel_dx, 8, sizeof(float), &h);
+	clSetKernelArg(kernel_dx, 9, sizeof(int), &numpts);
+	clSetKernelArg(kernel_dx, 10, sizeof(int), &Nw);
+	clSetKernelArg(kernel_dx, 11, sizeof(float), &dt);
 
 	clSetKernelArg(kernel_pos, 0, sizeof(cl_mem), &buf_x);
 	clSetKernelArg(kernel_pos, 1, sizeof(cl_mem), &buf_tmpf2);
@@ -382,6 +380,14 @@ int main(int argc, char *argv[])
 	                                          CL_QUEUE_PROFILING_ENABLE, &error);
     CheckError(error);
     cl_event event;
+
+    string command_str = "mkdir -p " + output_dir;
+    const char* command = command_str.c_str();
+    system(command);
+
+    command_str = "mkdir -p wall";
+    const char* command2 = command_str.c_str();
+    system(command2);
 
     int nTime = total_t / dt;
     CheckError(clEnqueueNDRangeKernel(Q, kernel_p, 1,
